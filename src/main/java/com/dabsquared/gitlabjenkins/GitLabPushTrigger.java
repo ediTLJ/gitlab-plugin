@@ -128,10 +128,11 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
                     values.put("gitlabSourceBranch", new StringParameterValue("gitlabSourceBranch", branch));
                     values.put("gitlabTargetBranch", new StringParameterValue("gitlabTargetBranch", branch));
                     values.put("gitlabBranch", new StringParameterValue("gitlabBranch", branch));
+                    values.put("gitlabRepoName", new StringParameterValue("gitlabRepoName", req.getRepository().getName()));
                     
                     LOGGER.log(Level.INFO, "Trying to get name and URL for job: {0} using project {1} (push)", new String[]{job.getName(), getDesc().project.getName()});
-                    values.put("gitlabSourceRepoName", new StringParameterValue("gitlabSourceRepoName", getDesc().getSourceRepoNameDefault(job)));
-                	values.put("gitlabSourceRepoURL", new StringParameterValue("gitlabSourceRepoURL", getDesc().getSourceRepoURLDefault(job).toString()));
+                    values.put("gitlabSourceRepoName", new StringParameterValue("gitlabSourceRepoName", getDesc().getSourceRepoNameDefault(job, req)));
+                	values.put("gitlabSourceRepoURL", new StringParameterValue("gitlabSourceRepoURL", getDesc().getSourceRepoURLDefault(job, req).toString()));
                 	
                     List<ParameterValue> listValues = new ArrayList<ParameterValue>(values.values());
 
@@ -181,8 +182,8 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
                     values.put("gitlabTargetBranch", new StringParameterValue("gitlabTargetBranch", req.getObjectAttribute().getTargetBranch()));
                     
                     LOGGER.log(Level.INFO, "Trying to get name and URL for job: {0} using project {1}", new String[]{job.getName(), getDesc().project.getName()});
-                    String sourceRepoName = getDesc().getSourceRepoNameDefault(job);
-                    String sourceRepoURL = getDesc().getSourceRepoURLDefault(job).toString();
+                    String sourceRepoName = getDesc().getSourceRepoNameDefault(job, req);
+                    String sourceRepoURL = getDesc().getSourceRepoURLDefault(job, req).toString();
                     
                     if (!getDescriptor().getGitlabHostUrl().isEmpty()) {                                        
                     	// Get source repository if communication to Gitlab is possible
@@ -361,7 +362,7 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
             		cannot search projects by namespace/name
             		For now getting project id before getting project branches
             	 */
-        		URIish sourceRepository = getSourceRepoURLDefault(project);
+        		URIish sourceRepository = getSourceRepoURLDefault(project, null);
         		if (!gitlabHostUrl.isEmpty() && (null != sourceRepository)) {
         			List<GitlabProject> projects = getGitlab().instance().getProjects();
         			for (GitlabProject project : projects) {
@@ -389,7 +390,7 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
          * 
          * @return URIish the default value of the source repository url
          */
-        protected URIish getSourceRepoURLDefault(AbstractProject job) {
+        protected URIish getSourceRepoURLDefault(AbstractProject job, GitLabRequest req) {
         	URIish url = null;
         	SCM scm = job.getScm();
         	if(!(scm instanceof GitSCM)) {
@@ -399,7 +400,22 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
 						new String[] { scm.getClass().getCanonicalName(),
 								project.getName(),
 								String.valueOf(project.getNextBuildNumber()) });
-                throw new IllegalArgumentException("This repo does not use git:" + scm.getClass().getCanonicalName());
+
+                if (req == null) {
+                    return url;
+                }
+
+                if (req instanceof GitLabPushRequest) {
+                    try {
+                        url = new URIish(((GitLabPushRequest) req).getRepository().getUrl());
+                    } catch (Exception e) {
+                        LOGGER.log(Level.WARNING, "Error creating URIish in getSourceRepoURLDefault.");
+                    }
+                } else {
+                    throw new IllegalArgumentException("This repo does not use git:" + scm.getClass().getCanonicalName());
+                }
+
+                LOGGER.log(Level.INFO, "Using repo URL from GitLab Request instead: {0}.", url.toString());
             }
             if (scm instanceof GitSCM) {
             	List<RemoteConfig> repositories = ((GitSCM) scm).getRepositories();
@@ -420,7 +436,7 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
          * 
          * @return String with the default name of the source repository
          */
-        protected String getSourceRepoNameDefault(AbstractProject job) {
+        protected String getSourceRepoNameDefault(AbstractProject job, GitLabRequest req) {
         	String result = null;
         	SCM scm = job.getScm();
         	if(!(scm instanceof GitSCM)) {
@@ -430,7 +446,14 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
 						new String[] { scm.getClass().getCanonicalName(),
 								project.getName(),
 								String.valueOf(project.getNextBuildNumber()) });
-                throw new IllegalArgumentException("This repo does not use git.:" + scm.getClass().getCanonicalName());
+
+                if (req instanceof GitLabPushRequest) {
+                    result = ((GitLabPushRequest) req).getRepository().getName();
+                } else {
+                    throw new IllegalArgumentException("This repo does not use git.:" + scm.getClass().getCanonicalName());
+                }
+
+                LOGGER.log(Level.INFO, "Using repo name from GitLab Request instead: {0}.", result);
             }
             if (scm instanceof GitSCM) {
             	List<RemoteConfig> repositories = ((GitSCM) scm).getRepositories();
