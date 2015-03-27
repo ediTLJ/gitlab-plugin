@@ -376,7 +376,19 @@ public class GitLabPushTrigger extends Trigger<AbstractProject<?, ?>> {
 							break;
 						}					
 					}    			
-        		}				
+        		}
+
+                if (!(project.getScm() instanceof GitSCM)) {
+                    // no Git SCM found... sourceRepository is null
+                    // => we add some default hardcoded branches to choose from
+                    projectBranches.add("demo");
+                    projectBranches.add("develop");
+                    projectBranches.add("develop-x86");
+                    projectBranches.add("master");
+                    projectBranches.add("master-x86");
+                    projectBranches.add("staging");
+                    projectBranches.add("staging-x86");
+                }
 			} catch (Exception ex) {
 				LOGGER.log(Level.WARNING, "Could not fetch source project''s data from Gitlab. '('{0}':' {1}')'", new String[]{ex.toString(), ex.getMessage()});
 			}
